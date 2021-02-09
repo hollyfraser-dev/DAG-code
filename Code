@@ -1,0 +1,91 @@
+library(bnlearn)
+library (qgraph)
+
+data <- read.csv(file= "SimulatedData.csv") # ALSPAC sim data
+
+
+SMFQ <- data[c("sex",
+                  "smfq_q1_age18",
+                  "smfq_q2_age18",
+                  "smfq_q3_age18",
+                  "smfq_q4_age18",
+                  "smfq_q5_age18"
+              )]
+
+# changing column / variable names for better node labelling
+
+names(SMFQ)[2] <- "1"
+names(SMFQ)[3] <- "2"
+names(SMFQ)[4] <- "3"
+names(SMFQ)[5] <- "4"
+names(SMFQ)[6] <- "5"
+
+SMFQ <- na.omit(SMFQ)
+
+# set gender as categorical - just following SE's tutorial here
+
+SMFQ$sex <- factor(SMFQ$sex,
+                   levels=c(0,1),
+                   labels=c("Male", "Female"))
+
+# make all others numeric
+for (i in c(2:6)){
+  SMFQ[,i] <- as.numeric(SMFQ[,i])
+}
+
+# whitelisting and blacklisting - both lists should be encoded as a matrix
+# nothing in this dataset can cause sex, so that association must be blacklisted
+
+Blacklist <- matrix(c(
+  "1", "sex",
+  "2", "sex",
+  "3", "sex",
+  "4", "sex",
+  "5", "sex"
+   ),,2,byrow=TRUE)
+colnames(Blacklist) <- c("from", "to")
+  
+Blacklist  
+  
+# choose one of the bnlearn algos to estimate DAG - in this case, incremental association markov blanket (IAMB)
+
+DAG <- iamb(SMFQ, blacklist = Blacklist)
+
+# print a summary
+bnlearn:::print.bn(DAG)
+
+# make labels
+
+Labels <- c("Sex",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5")
+        
+
+qgraph(DAG, nodeNames = Labels, legend.cex = 0.5, asize = 5, edge.color = "black")
+
+
+# orient the undirected arc (this seems to be done randomly)
+
+DAG <- set.arc(DAG, from = "3", to = "5")
+g <- qgraph(DAG, nodeNames = Labels, legend.cex = 0.5, asize = 5, edge.color = "black")
+
+# now that everything's directed, we can parameterize the model
+# fitting the model we've just created to our dataset
+
+fit <- bn.fit(DAG, SMFQ)
+fit$"1"
+
+# bootstrapping results to check for stability
+
+boot <- boot.strength(SMFQ, R = 1000,
+                      algorithm = "iamb",
+                      algorithm.args = list(blacklist = Blacklist))
+
+
+
+# plot it - shows how often in 1000 bootstraps an edge was included (the closer to 1, the more stable the edge)
+
+qgraph(boot, nodeNames = Labels, legend.cex = 0.5, edge.labels=TRUE, layout = g$layout, asize = 5, edge.color = "black")
